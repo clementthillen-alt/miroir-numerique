@@ -7,6 +7,9 @@ const Anthropic = require('@anthropic-ai/sdk');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// ─── Trust proxy (nécessaire sur Railway/Heroku derrière un reverse proxy) ────
+app.set('trust proxy', 1);
+
 // ─── Middleware ────────────────────────────────────────────────────────────────
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -29,7 +32,7 @@ const apiLimiter = rateLimit({
 // ─── Client Anthropic ─────────────────────────────────────────────────────────
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
-  timeout: 30000
+  timeout: 90000 // 90 secondes (web_search peut être lent)
 });
 
 // ─── Prompt système ───────────────────────────────────────────────────────────
@@ -72,7 +75,7 @@ app.post('/api/analyze', apiLimiter, async (req, res) => {
     });
   }
 
-  const cleanName = name.trim().slice(0, 100); // Limiter la longueur
+  const cleanName = name.trim().slice(0, 100);
 
   if (!process.env.ANTHROPIC_API_KEY) {
     return res.status(500).json({
@@ -84,7 +87,7 @@ app.post('/api/analyze', apiLimiter, async (req, res) => {
   try {
     // Appel à Claude avec l'outil web_search
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-sonnet-4-5',
       max_tokens: 2048,
       system: SYSTEM_PROMPT,
       tools: [
@@ -111,7 +114,6 @@ app.post('/api/analyze', apiLimiter, async (req, res) => {
     }
 
     // Nettoyer et parser le JSON
-    // Supprimer les éventuelles balises markdown
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       throw new Error('Format de réponse invalide');
@@ -185,4 +187,5 @@ app.get('*', (req, res) => {
 app.listen(PORT, () => {
   console.log(`✨ Miroir Numérique démarré sur le port ${PORT}`);
   console.log(`   → http://localhost:${PORT}`);
+  console.log(`   → ANTHROPIC_API_KEY: ${process.env.ANTHROPIC_API_KEY ? 'OK (' + process.env.ANTHROPIC_API_KEY.slice(0,15) + '...)' : 'MANQUANTE'}`);
 });
